@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeGraph 🧠 — 代码知识图谱</title>
+<script src="https://unpkg.com/vis-network@9.1.9/dist/vis-network.min.js"></script>
+<link href="https://unpkg.com/vis-network@9.1.9/dist/dist/vis-network.min.css" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent2: #f78166;
+    --accent3: #3fb950;
+    --accent4: #d2a8ff;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+  }
+  .header-logo { font-size: 24px; }
+  .header-title { font-size: 18px; font-weight: 600; color: var(--accent); }
+  .header-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .header-badge {
+    margin-left: auto;
+    background: linear-gradient(135deg, #238636, #2ea043);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Layout */
+  .main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+    height: calc(100vh - 65px);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-section h3 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .code-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    resize: vertical;
+    min-height: 160px;
+    line-height: 1.5;
+    transition: border-color 0.2s;
+  }
+  .code-input:focus { outline: none; border-color: var(--accent); }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #0d1117;
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .btn-primary:hover { background: #79c0ff; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .examples {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .example-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+    transition: all 0.2s;
+  }
+  .example-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Legend */
+  .legend { display: flex; flex-direction: column; gap: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Info panel */
+  .info-panel {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .info-panel h3 { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 10px; }
+  .node-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .node-type {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .node-name { font-size: 16px; font-weight: 600; margin-bottom: 8px; font-family: monospace; }
+  .node-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .node-connections {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .node-connections strong { color: var(--text); }
+  .placeholder-text {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .placeholder-text .tip {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(88, 166, 255, 0.08);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* Graph area */
+  .graph-area {
+    position: relative;
+    background: var(--bg);
+  }
+  #graph-container {
+    width: 100%;
+    height: 100%;
+  }
+  .graph-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+  .graph-overlay.hidden { display: none; }
+  .graph-overlay-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.3; }
+  .graph-overlay-text { color: var(--text-muted); font-size: 14px; }
+
+  /* Query bar */
+  .query-bar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 8px 16px;
+    width: min(500px, 90%);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .query-input {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .query-input::placeholder { color: var(--text-muted); }
+  .query-submit {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .query-submit:hover { background: #79c0ff; }
+
+  /* Stats bar */
+  .stats-bar {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+  }
+  .stat-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .stat-chip span { color: var(--text); font-weight: 600; }
+
+  /* Loading */
+  .loading-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #0d1117;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 13px;
+    z-index: 1000;
+    animation: slideUp 0.3s ease;
+    pointer-events: none;
+  }
+  @keyframes slideUp { from { opacity: 0; bottom: 60px; } to { opacity: 1; bottom: 80px; } }
+
+  .highlight { color: var(--accent); font-weight: 600; }
+
+  /* Mobile responsive */
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; overflow-y: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">🧠</div>
+  <div>
+    <div class="header-title">CodeGraph</div>
+    <div class="header-subtitle">把代码变成可探索的知识图谱</div>
+  </div>
+  <div class="header-badge">⚡ 由 AI 驱动</div>
+</div>
+
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <h3>📄 粘贴代码</h3>
+      <textarea class="code-input" id="codeInput" placeholder="粘贴任意代码片段...
+
+支持 Python / JS / TS / Java / Go / Rust 等"></textarea>
+      <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeCode()">
+        <span id="btnIcon">🔍</span>
+        <span id="btnText">生成知识图谱</span>
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>💡 快速示例</h3>
+      <div class="examples">
+        <button class="example-btn" onclick="loadExample('python')">🐍 Python 数据处理管道</button>
+        <button class="example-btn" onclick="loadExample('react')">⚛️ React 组件树</button>
+        <button class="example-btn" onclick="loadExample('api')">🌐 REST API 设计</button>
+        <button class="example-btn" onclick="loadExample('agent')">🤖 AI Agent 架构</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>🎨 节点类型</h3>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div>函数 / 方法</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#d2a8ff"></div>类 / 模块</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>变量 / 数据</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f78166"></div>外部依赖</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffa657"></div>API / 接口</div>
+      </div>
+    </div>
+
+    <div class="info-panel" id="infoPanel">
+      <h3>🖱️ 节点详情</h3>
+      <div class="placeholder-text">
+        点击图谱中任意节点，查看详细解释
+        <div class="tip">
+          💬 也可以在下方搜索框用自然语言提问，例如<br>
+          <span class="highlight">"这个函数做了什么？"</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Graph -->
+  <div class="graph-area">
+    <div id="graphContainer"></div>
+
+    <div class="graph-overlay" id="graphOverlay">
+      <div class="graph-overlay-icon">🧬</div>
+      <div class="graph-overlay-text">粘贴代码并点击「生成知识图谱」<br>AI 将自动提取实体和关系</div>
+    </div>
+
+    <div class="stats-bar" id="statsBar" style="display:none">
+      <div class="stat-chip">节点 <span id="nodeCount">0</span></div>
+      <div class="stat-chip">关系 <span id="edgeCount">0</span></div>
+    </div>
+
+    <div class="query-bar">
+      <input class="query-input" id="queryInput" placeholder="💬 提问，例如：这个类有哪些方法？main 函数做了什么？" onkeydown="if(event.key==='Enter')askQuestion()">
+      <button class="query-submit" onclick="askQuestion()">问</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== CONFIG ====================
+const AISA_KEY = 'sk-d2n3PIPWBOc3VTgqHuqvtmTaSZ5JtolHBnUAaUrAZgTjst41';
+const AISA_URL = 'https://api.aisa.one/v1/chat/completions';
+
+// ==================== EXAMPLES ====================
+const EXAMPLES = {
+  python: `class DataPipeline:
+    def __init__(self, source, target):
+        self.source = source
+        self.target = target
+        self.transformers = []
+        self.logger = Logger()
+    
+    def add_transformer(self, fn):
+        self.transformers.append(fn)
+        return self
+    
+    def run(self):
+        data = self.fetch(self.source)
+        for transform in self.transformers:
+            data = transform(data)
+        self.write(self.target, data)
+        self.logger.info("Pipeline complete")
+    
+    def fetch(self, source):
+        return DataLoader(source).load()
+    
+    def write(self, target, data):
+        DataWriter(target).write(data)
+
+def normalize(data):
+    return [x / max(data) for x in data]
+
+def filter_outliers(data, threshold=3.0):
+    mean = sum(data) / len(data)
+    return [x for x in data if abs(x - mean) < threshold]`,
+
+  react: `import React, { useState, useEffect } from 'react';
+import { fetchUser } from './api/users';
+import Avatar from './components/Avatar';
+import PostList from './components/PostList';
+
+function UserProfile({ userId }) {
+  const [user, setUser] = useState(null);
+  const [posts, setPosts] = useState([]);
+  
+  useEffect(() => {
+    fetchUser(userId).then(data => {
+      setUser(data.user);
+      setPosts(data.posts);
+    });
+  }, [userId]);
+  
+  if (!user) return <LoadingSpinner />;
+  
+  return (
+    <div className="profile">
+      <Avatar src={user.avatar} name={user.name} />
+      <h1>{user.name}</h1>
+      <PostList posts={posts} onLike={handleLike} />
+    </div>
+  );
+}
+
+function handleLike(postId) {
+  likePost(postId).then(updateFeed);
+}`,
+
+  api: `// Express REST API
+const router = express.Router();
+
+router.get('/users', authenticate, async (req, res) => {
+  const users = await UserService.findAll(req.query);
+  res.json({ data: users, total: users.length });
+});
+
+router.post('/users', validate(UserSchema), async (req, res) => {
+  const user = await UserService.create(req.body);
+  EmailService.sendWelcome(user.email);
+  res.status(201).json(user);
+});
+
+router.put('/users/:id', authenticate, authorize('admin'), async (req, res) => {
+  const user = await UserService.update(req.params.id, req.body);
+  res.json(user);
+});
+
+class UserService {
+  static async create(data) {
+    const hashed = await bcrypt.hash(data.password, 10);
+    return db.users.create({ ...data, password: hashed });
+  }
+}`,
+
+  agent: `class AIAgent:
+    def __init__(self, llm, tools, memory):
+        self.llm = llm
+        self.tools = {t.name: t for t in tools}
+        self.memory = memory
+        self.planner = TaskPlanner(llm)
+    
+    async def run(self, task: str) -> str:
+        context = self.memory.retrieve(task)
+        plan = await self.planner.plan(task, context)
+        
+        results = []
+        for step in plan.steps:
+            tool = self.tools.get(step.tool_name)
+            result = await tool.execute(step.args)
+            results.append(result)
+            self.memory.store(step, result)
+        
+        return await self.llm.summarize(results)
+
+class TaskPlanner:
+    def __init__(self, llm):
+        self.llm = llm
+    
+    async def plan(self, task, context):
+        prompt = f"Plan steps to: {task}\nContext: {context}"
+        return await self.llm.structured_output(prompt, Plan)
+
+class VectorMemory:
+    def store(self, key, value):
+        embedding = embed(str(key) + str(value))
+        self.db.insert(embedding, value)
+    
+    def retrieve(self, query, k=5):
+        q_embed = embed(query)
+        return self.db.search(q_embed, k)`
+};
+
+// ==================== VIS NETWORK ====================
+let network = null;
+let currentNodes = null;
+let currentEdges = null;
+let graphData = null;
+
+function getNodeColor(type) {
+  const colors = {
+    function: { background: '#1a3a5c', border: '#58a6ff', highlight: { background: '#1e4a70', border: '#79c0ff' } },
+    class: { background: '#2d1a5c', border: '#d2a8ff', highlight: { background: '#3a2070', border: '#e0baff' } },
+    variable: { background: '#1a3a26', border: '#3fb950', highlight: { background: '#1e4a30', border: '#56d364' } },
+    dependency: { background: '#3a1a1a', border: '#f78166', highlight: { background: '#4a2020', border: '#ff9580' } },
+    api: { background: '#3a2a1a', border: '#ffa657', highlight: { background: '#4a3420', border: '#ffb870' } },
+    default: { background: '#1e2430', border: '#8b949e', highlight: { background: '#252e3d', border: '#aab4be' } }
+  };
+  return colors[type] || colors.default;
+}
+
+function initNetwork(graphJSON) {
+  const container = document.getElementById('graphContainer');
+  container.style.width = '100%';
+  container.style.height = '100%';
+
+  const nodes = new vis.DataSet(graphJSON.nodes.map(n => ({
+    id: n.id,
+    label: n.name,
+    title: n.description,
+    color: getNodeColor(n.type),
+    font: { color: '#e6edf3', size: 13, face: 'Courier New' },
+    shape: n.type === 'class' ? 'box' : n.type === 'dependency' ? 'diamond' : 'ellipse',
+    size: n.importance === 'high' ? 28 : n.importance === 'medium' ? 20 : 14,
+    borderWidth: 2,
+    shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 8 },
+    _data: n
+  })));
+
+  const edges = new vis.DataSet(graphJSON.edges.map((e, i) => ({
+    id: i,
+    from: e.from,
+    to: e.to,
+    label: e.label,
+    arrows: 'to',
+    color: { color: '#30363d', highlight: '#58a6ff' },
+    font: { color: '#8b949e', size: 10, background: '#0d1117' },
+    smooth: { type: 'curvedCW', roundness: 0.15 },
+    width: e.weight === 'strong' ? 2 : 1,
+    dashes: e.type === 'optional'
+  })));
+
+  currentNodes = nodes;
+  currentEdges = edges;
+
+  const options = {
+    physics: {
+      enabled: true,
+      barnesHut: {
+        gravitationalConstant: -8000,
+        centralGravity: 0.3,
+        springLength: 120,
+        springConstant: 0.04,
+        damping: 0.09
+      },
+      stabilization: { iterations: 150 }
+    },
+    interaction: {
+      hover: true,
+      tooltipDelay: 300,
+      navigationButtons: false,
+      zoomView: true
+    },
+    layout: { improvedLayout: true }
+  };
+
+  if (network) network.destroy();
+  network = new vis.Network(container, { nodes, edges }, options);
+
+  network.on('click', params => {
+    if (params.nodes.length > 0) {
+      const nodeId = params.nodes[0];
+      const node = nodes.get(nodeId);
+      showNodeInfo(node._data, graphJSON.edges.filter(e => e.from === nodeId || e.to === nodeId));
+    }
+  });
+
+  // Update stats
+  document.getElementById('nodeCount').textContent = graphJSON.nodes.length;
+  document.getElementById('edgeCount').textContent = graphJSON.edges.length;
+  document.getElementById('statsBar').style.display = 'flex';
+}
+
+function showNodeInfo(node, edges) {
+  const typeColors = {
+    function: '#58a6ff', class: '#d2a8ff',
+    variable: '#3fb950', dependency: '#f78166', api: '#ffa657'
+  };
+  const typeLabels = {
+    function: '函数', class: '类/模块', variable: '变量', dependency: '依赖', api: 'API接口'
+  };
+  const color = typeColors[node.type] || '#8b949e';
+  const label = typeLabels[node.type] || node.type;
+
+  const connInfo = edges.length > 0
+    ? `<div class="node-connections">
+        <strong>关联关系</strong>（${edges.length} 条）：<br>
+        ${edges.slice(0,4).map(e => `• ${e.label}: <span style="color:var(--accent)">${e.from === node.id ? e.to : e.from}</span>`).join('<br>')}
+        ${edges.length > 4 ? `<br>...等 ${edges.length} 条` : ''}
+      </div>`
+    : '';
+
+  document.getElementById('infoPanel').innerHTML = `
+    <h3>🖱️ 节点详情</h3>
+    <div class="node-card">
+      <div class="node-type" style="background:${color}22; color:${color}; border:1px solid ${color}44">${label}</div>
+      <div class="node-name">${node.name}</div>
+      <div class="node-desc">${node.description}</div>
+      ${node.signature ? `<div style="margin-top:10px;padding:8px;background:var(--bg);border-radius:4px;font-family:monospace;font-size:11px;color:var(--accent)">${node.signature}</div>` : ''}
+      ${connInfo}
+    </div>`;
+}
+
+// ==================== AI ANALYSIS ====================
+async function analyzeCode() {
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code) { showToast('⚠️ 请先粘贴代码'); return; }
+
+  setLoading(true);
+
+  const prompt = `Analyze this code and extract a knowledge graph. Return ONLY valid JSON (no markdown, no explanation):
+
+{
+  "nodes": [
+    {
+      "id": "unique_id",
+      "name": "NodeName",
+      "type": "function|class|variable|dependency|api",
+      "description": "中文说明（2-3句话，解释这个元素的作用）",
+      "importance": "high|medium|low",
+      "signature": "optional: function signature or class definition"
+    }
+  ],
+  "edges": [
+    {
+      "from": "id1",
+      "to": "id2",
+      "label": "调用|继承|包含|依赖|返回",
+      "type": "required|optional",
+      "weight": "strong|weak"
+    }
+  ],
+  "summary": "一句话总结这段代码的作用"
+}
+
+Rules:
+- Include ALL functions, classes, key variables, external dependencies
+- Chinese descriptions
+- Max 20 nodes to keep it clean
+- Focus on meaningful relationships
+
+Code:
+\`\`\`
+${code}
+\`\`\``;
+
+  try {
+    const resp = await callAI(prompt, 'gpt-4.1-mini');
+    let jsonStr = resp.trim();
+    // Strip markdown if present
+    jsonStr = jsonStr.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
+    const data = JSON.parse(jsonStr);
+    graphData = data;
+
+    document.getElementById('graphOverlay').classList.add('hidden');
+    initNetwork(data);
+
+    if (data.summary) {
+      document.getElementById('infoPanel').innerHTML = `
+        <h3>🖱️ 图谱概览</h3>
+        <div class="node-card">
+          <div class="node-desc">📊 ${data.summary}</div>
+          <div style="margin-top:10px;color:var(--text-muted);font-size:12px">
+            共提取 <span style="color:var(--accent)">${data.nodes.length}</span> 个节点，
+            <span style="color:var(--accent)">${data.edges.length}</span> 条关系<br><br>
+            点击节点查看详情，或在下方提问
+          </div>
+        </div>`;
+    }
+
+    showToast('✅ 知识图谱生成成功！');
+  } catch (e) {
+    console.error(e);
+    showToast('❌ 解析失败，请重试');
+  }
+
+  setLoading(false);
+}
+
+async function askQuestion() {
+  const q = document.getElementById('queryInput').value.trim();
+  if (!q) return;
+  if (!graphData) { showToast('⚠️ 请先生成图谱'); return; }
+
+  const code = document.getElementById('codeInput').value;
+  const prompt = `Based on this code knowledge graph and code, answer this question in Chinese (2-4 sentences, be specific):
+
+Graph nodes: ${JSON.stringify(graphData.nodes.map(n => ({name:n.name, type:n.type, desc:n.description})))}
+Graph edges: ${JSON.stringify(graphData.edges)}
+Code snippet: ${code.substring(0, 500)}
+
+Question: ${q}
+
+Answer directly and concisely in Chinese.`;
+
+  document.getElementById('infoPanel').innerHTML = `
+    <h3>💬 提问回答</h3>
+    <div class="node-card">
+      <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px">Q: ${q}</div>
+      <div class="node-desc" id="answerText">🤔 正在思考...</div>
+    </div>`;
+
+  try {
+    const answer = await callAI(prompt, 'gpt-4.1-mini');
+    document.getElementById('answerText').textContent = answer;
+  } catch(e) {
+    document.getElementById('answerText').textContent = '抱歉，回答失败了。';
+  }
+  document.getElementById('queryInput').value = '';
+}
+
+// ==================== HELPERS ====================
+async function callAI(prompt, model = 'gpt-4.1-mini') {
+  const resp = await fetch(AISA_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${AISA_KEY}`
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 2000
+    })
+  });
+  if (!resp.ok) throw new Error(`API ${resp.status}`);
+  const data = await resp.json();
+  return data.choices[0].message.content;
+}
+
+function loadExample(key) {
+  document.getElementById('codeInput').value = EXAMPLES[key];
+}
+
+function setLoading(on) {
+  const btn = document.getElementById('analyzeBtn');
+  const icon = document.getElementById('btnIcon');
+  const text = document.getElementById('btnText');
+  btn.disabled = on;
+  if (on) {
+    icon.innerHTML = '<span class="loading-spinner"></span>';
+    text.textContent = 'AI 分析中...';
+  } else {
+    icon.textContent = '🔍';
+    text.textContent = '生成知识图谱';
+  }
+}
+
+function showToast(msg) {
+  const old = document.querySelector('.toast');
+  if (old) old.remove();
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+// ==================== INIT ====================
+// Auto-load example on start
+window.addEventListener('load', () => {
+  loadExample('agent');
+});
+</script>
+
+</body>
+</html>
