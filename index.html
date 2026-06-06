@@ -757,8 +757,79 @@ async function callAI(prompt, model = 'gpt-4.1-mini') {
   return data.choices[0].message.content;
 }
 
+// ==================== DEMO GRAPH DATA ====================
+// Pre-built mock graph data for quick examples (no API needed)
+const DEMO_GRAPHS = {
+  agent: {
+    nodes: [
+      {id:1, name:'AIAgent', type:'class', description:'AI代理主类，协调LLM、工具和记忆模块'},
+      {id:2, name:'__init__', type:'function', description:'初始化代理：LLM、工具集合、记忆、任务规划器'},
+      {id:3, name:'run', type:'function', description:'异步执行任务：检索上下文→规划→执行→汇总'},
+      {id:4, name:'TaskPlanner', type:'class', description:'任务规划器，将任务分解为可执行步骤序列'},
+      {id:5, name:'plan', type:'function', description:'生成结构化执行计划，包含工具调用步骤'},
+      {id:6, name:'VectorMemory', type:'class', description:'向量数据库内存模块，支持语义存储和检索'},
+      {id:7, name:'store', type:'function', description:'将步骤和结果嵌入并存入向量数据库'},
+      {id:8, name:'retrieve', type:'function', description:'语义搜索返回top-k相关上下文'},
+      {id:9, name:'llm', type:'variable', description:'语言模型实例，负责推理和生成'},
+      {id:10, name:'tools', type:'variable', description:'工具字典 {name: Tool}，支持动态调用'},
+      {id:11, name:'embed', type:'dependency', description:'外部嵌入函数，用于文本向量化'}
+    ],
+    edges: [
+      {from:1, to:2, label:'包含'}, {from:1, to:3, label:'包含'},
+      {from:1, to:4, label:'依赖'}, {from:1, to:6, label:'依赖'},
+      {from:4, to:5, label:'包含'}, {from:6, to:7, label:'包含'},
+      {from:6, to:8, label:'包含'}, {from:3, to:5, label:'调用'},
+      {from:3, to:8, label:'调用'}, {from:7, to:11, label:'调用'},
+      {from:8, to:11, label:'调用'}, {from:1, to:9, label:'持有'},
+      {from:1, to:10, label:'持有'}
+    ],
+    summary: '多模态AI代理架构：AIAgent协调LLM推理、工具执行和向量记忆，通过TaskPlanner将复杂任务分解为可执行步骤'
+  },
+  python: {
+    nodes: [
+      {id:1, name:'DataPipeline', type:'class', description:'数据处理管道主类，支持链式变换'},
+      {id:2, name:'__init__', type:'function', description:'初始化来源、目标、变换器列表和日志器'},
+      {id:3, name:'add_transformer', type:'function', description:'添加变换函数，返回self支持链式调用'},
+      {id:4, name:'run', type:'function', description:'执行完整管道：获取→变换→写入'},
+      {id:5, name:'fetch', type:'function', description:'从数据源获取原始数据'},
+      {id:6, name:'transformers', type:'variable', description:'变换函数列表，按顺序执行'},
+      {id:7, name:'Logger', type:'dependency', description:'外部日志模块'},
+      {id:8, name:'source', type:'variable', description:'数据来源地址'},
+      {id:9, name:'target', type:'variable', description:'数据目标地址'}
+    ],
+    edges: [
+      {from:1, to:2, label:'包含'}, {from:1, to:3, label:'包含'},
+      {from:1, to:4, label:'包含'}, {from:1, to:5, label:'包含'},
+      {from:4, to:5, label:'调用'}, {from:3, to:6, label:'修改'},
+      {from:1, to:7, label:'依赖'}, {from:2, to:8, label:'初始化'},
+      {from:2, to:9, label:'初始化'}
+    ],
+    summary: '数据处理管道：DataPipeline支持链式变换，从source获取数据经多个transformer处理后写入target'
+  }
+};
+
 function loadExample(key) {
   document.getElementById('codeInput').value = EXAMPLES[key];
+  // Auto-show demo graph if available
+  if (DEMO_GRAPHS[key]) {
+    const demoData = DEMO_GRAPHS[key];
+    graphData = demoData;
+    document.getElementById('graphOverlay').classList.add('hidden');
+    initNetwork(demoData);
+    if (demoData.summary) {
+      document.getElementById('infoPanel').innerHTML = `
+        <h3>🖱️ 图谱概览</h3>
+        <div class="node-card">
+          <div class="node-desc">📊 ${demoData.summary}</div>
+          <div style="margin-top:10px;color:var(--text-muted);font-size:12px">
+            共提取 <span style="color:var(--accent)">${demoData.nodes.length}</span> 个节点，
+            <span style="color:var(--accent)">${demoData.edges.length}</span> 条关系<br><br>
+            🎯 演示模式 — 点击「生成知识图谱」用 AI 分析你自己的代码
+          </div>
+        </div>`;
+    }
+    showToast('🎯 演示图谱已加载，可直接探索节点！');
+  }
 }
 
 function setLoading(on) {
